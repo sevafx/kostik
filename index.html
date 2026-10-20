@@ -885,7 +885,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
 
   // ---- the lady in a blue jacket: follows Kostik, waits on the lane lines and lets the GAZelles pass ----
   const LADY_STOPS = [54, 2 * R, 3 * R, 4 * R, 5 * R, 6 * R, 7 * R + 54]; // feet y: sidewalks and lane lines
-  const LADY_WALK = 60;
+  const LADY_WALK = 115;
   const ladyX = () => cx() - 30;
   const ladyBob = () => -Math.abs(Math.sin(lady.phase)) * 1.2;
   // will a truck of this lane, or the next one to appear, reach her spot within `time` seconds?
@@ -909,7 +909,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
     if (lady.to >= 0) {
       const d = LADY_STOPS[lady.to] - lady.g;
       lady.g += Math.sign(d) * Math.min(Math.abs(d), LADY_WALK * dt);
-      lady.phase += dt * 10;
+      lady.phase += dt * 17;
       if (lady.g === LADY_STOPS[lady.to]) { lady.i = lady.to; lady.to = -1; }
     } else lady.phase = 0;
     lady.puff -= dt;
@@ -1102,13 +1102,8 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
     if (state === 'crash' && stateT < 0.3) ctx.translate(rnd(-2.5, 2.5), rnd(-2.5, 2.5));
     drawGround();
-    let ladyDone = false;
-    for (const ln of lanes) {
-      // she is drawn behind the lane she waits at, so a passing GAZelle drives in front of her
-      if (!ladyDone && lady.g - 12 < ln.row * R + R - 9) { drawLady(); ladyDone = true; }
-      for (const t of ln.trucks) drawGazel(t, ln);
-    }
-    if (!ladyDone) drawLady();
+    for (const ln of lanes) for (const t of ln.trucks) drawGazel(t, ln);
+    drawLady();
     drawPlayer();
     drawFx();
   }
