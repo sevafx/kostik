@@ -311,7 +311,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
         <canvas class="portrait" id="hero" width="104" height="104" aria-hidden="true"></canvas>
         <p class="eyebrow">Пешеходный переход · 6 полос</p>
         <h2>Переведи Костика через дорогу</h2>
-        <p>Костик едет на фиолетовом велике по зебре. Газели не тормозят, так что жди, пока откроется окно. За ним ходит тётя в длинном пальто с сигаретой, её Газели почему-то не сбивают.</p>
+        <p>Костик едет на фиолетовом велике по зебре. Газели не тормозят, так что жди, пока откроется окно. За ним ходит тётя в синей куртке и чёрной шапке. Она курит и терпеливо пропускает Газели.</p>
         <button class="cta" id="startBtn" type="button">Поехали</button>
         <button class="ghost" id="lbBtn" type="button">Таблица рекордов</button>
         <p class="small">Телефон: тап по дороге или кнопка ▲.<br>Компьютер: стрелка ↑ или пробел.</p>
@@ -398,7 +398,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
   let player = null, crash = null;
   let confetti = [];
   let smoke = [];
-  const lady = { y: 7 * 64 + 32, phase: 0, puff: 0 };
+  const lady = { i: 6, to: -1, g: 7 * 64 + 54, phase: 0, puff: 0 };
   let soundOn = true;
 
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -493,7 +493,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
   function start() {
     unlockAudio();
     score = 0; lives = 3; confetti = []; smoke = [];
-    lady.y = 7 * R + R / 2;
+    lady.i = 6; lady.to = -1; lady.g = LADY_STOPS[6];
     resetLanes(); resetPlayer();
     setState('play');
     $('menu').hidden = true; $('over').hidden = true;
@@ -883,70 +883,86 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
     }
   }
 
-  // ---- the lady in a long coat: walks one row behind Kostik, the GAZelles pass right through her ----
+  // ---- the lady in a blue jacket: follows Kostik, waits on the lane lines and lets the GAZelles pass ----
+  const LADY_STOPS = [54, 2 * R, 3 * R, 4 * R, 5 * R, 6 * R, 7 * R + 54]; // feet y: sidewalks and lane lines
+  const LADY_WALK = 60;
   const ladyX = () => cx() - 30;
   const ladyBob = () => -Math.abs(Math.sin(lady.phase)) * 1.2;
+  // will a truck of this lane, or the next one to appear, reach her spot within `time` seconds?
+  function laneBusy(ln, time) {
+    const v = ln.speed * mult(), xl = ladyX() - 20, xr = ladyX() + 24;
+    for (const t of ln.trucks) {
+      const a = ln.dir === 1 ? (xl - t.len - t.x) / v : (t.x - xr) / v;
+      const b = ln.dir === 1 ? (xr - t.x) / v : (t.x + t.len - xl) / v;
+      if (a < time && b > 0) return true;
+    }
+    const spawn = Math.max(0, (ln.need - ln.dist) / v);
+    return spawn + (ln.dir === 1 ? xl + 4 : W + 4 - xr) / v < time;
+  }
   function stepLady(dt) {
-    const ty = Math.min(7, (player ? player.row : 7) + 1) * R + R / 2, d = ty - lady.y;
-    if (Math.abs(d) > 0.5) { lady.y += Math.sign(d) * Math.min(Math.abs(d), 40 * dt); lady.phase += dt * 8; }
-    else lady.phase = 0;
+    const want = Math.min(6, player ? player.row : 6);
+    if (lady.to < 0 && want !== lady.i) {
+      const next = lady.i + Math.sign(want - lady.i);
+      const time = Math.abs(LADY_STOPS[next] - lady.g) / LADY_WALK + 0.4;
+      if (!laneBusy(lanes[Math.min(lady.i, next)], time)) lady.to = next;
+    }
+    if (lady.to >= 0) {
+      const d = LADY_STOPS[lady.to] - lady.g;
+      lady.g += Math.sign(d) * Math.min(Math.abs(d), LADY_WALK * dt);
+      lady.phase += dt * 10;
+      if (lady.g === LADY_STOPS[lady.to]) { lady.i = lady.to; lady.to = -1; }
+    } else lady.phase = 0;
     lady.puff -= dt;
     if (lady.puff <= 0) {
       lady.puff = 0.3;
-      smoke.push({ x: ladyX() + 14.5, y: lady.y + 22 + ladyBob() - 38.6, r: 1.1, a: 0.6, vx: rnd(2, 9), vy: rnd(-17, -10) });
+      smoke.push({ x: ladyX() + 14.5, y: lady.g + ladyBob() - 38.6, r: 1.1, a: 0.6, vx: rnd(2, 9), vy: rnd(-17, -10) });
     }
     for (const s of smoke) { s.x += s.vx * dt; s.y += s.vy * dt; s.r += dt * 4.5; s.a -= dt * 0.4; }
     smoke = smoke.filter(s => s.a > 0);
   }
 
   function drawLady() {
-    const x = ladyX(), g = lady.y + 22, ph = lady.phase;
-    ctx.save(); ctx.translate(x, g);
-    ctx.fillStyle = 'rgba(0,0,0,.22)'; oval(0.5, 1, 10, 2.5);
+    const x = ladyX(), ph = lady.phase;
+    ctx.save(); ctx.translate(x, lady.g);
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; oval(0.5, 1, 9.5, 2.5);
     ctx.translate(0, ladyBob());
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // legs in dark tights, little heeled shoes
+    // jeans and white sneakers
     for (const s of [-1, 1]) {
-      const fx = Math.sin(ph) * 3.4 * s;
-      ctx.strokeStyle = s < 0 ? '#231e29' : '#352d3b'; ctx.lineWidth = 2.4;
-      ctx.beginPath(); ctx.moveTo(s * 1.4, -11); ctx.lineTo(fx, -2); ctx.stroke();
-      ctx.fillStyle = '#121014'; rr(fx - 1.4, -2.8, 4.8, 2.6, 1); ctx.fill();
-      ctx.fillRect(fx - 1.4, -1.2, 1, 1.6);
+      const fx = Math.sin(ph) * 4 * s;
+      ctx.strokeStyle = s < 0 ? '#3d5a8c' : '#5876ab'; ctx.lineWidth = 3.6;
+      ctx.beginPath(); ctx.moveTo(s * 1.6, -21); ctx.lineTo(fx, -2.6); ctx.stroke();
+      ctx.fillStyle = '#f2f2f4'; rr(fx - 1.8, -3.2, 5.6, 3.2, 1.2); ctx.fill();
+      ctx.fillStyle = '#c9cad2'; ctx.fillRect(fx - 1.8, -0.9, 5.6, 0.9);
     }
-    // far arm hangs behind the coat
-    ctx.strokeStyle = '#8e6238'; ctx.lineWidth = 3.2; ctx.beginPath(); seg([[-2, -36], [-4, -29], [-3.5, -23]]); ctx.stroke();
-    ctx.fillStyle = '#efc4a6'; dot(-3.5, -22.4, 1.4);
-    // long camel coat with a belt, lapel and buttons
-    ctx.fillStyle = '#a8784a';
-    ctx.beginPath();
-    ctx.moveTo(-4.5, -39.5); ctx.lineTo(4.5, -39.5); ctx.quadraticCurveTo(7, -37, 6.4, -30);
-    ctx.lineTo(9, -8.5); ctx.quadraticCurveTo(0.5, -6.8, -8.5, -8.5);
-    ctx.lineTo(-6.4, -30); ctx.quadraticCurveTo(-7, -37, -4.5, -39.5);
-    ctx.fill();
-    ctx.strokeStyle = '#7c5531'; ctx.lineWidth = 0.9;
-    ctx.beginPath(); seg([[3, -36], [5.6, -9]]); seg([[-5, -18], [-6.5, -9]]); ctx.stroke();
-    ctx.fillStyle = '#8e6238'; ctx.beginPath(); ctx.moveTo(0.5, -39.5); ctx.lineTo(5, -38.6); ctx.lineTo(3.2, -31.5); ctx.fill();
-    ctx.fillStyle = '#6e4a2a'; rr(-6.8, -28.6, 14.2, 2.4, 1); ctx.fill();
-    ctx.fillStyle = '#c9a36a'; ctx.fillRect(2.6, -28.6, 2, 2.4);
-    ctx.fillStyle = '#3a2a1c'; dot(4.7, -23.5, 0.7); dot(5.2, -18.5, 0.7); dot(5.7, -13.5, 0.7);
-    // red scarf
-    ctx.fillStyle = '#c43a2f'; rr(-3.6, -41.4, 8.4, 3.2, 1.4); ctx.fill();
-    ctx.fillRect(-3.2, -39, 2.4, 6);
+    // far arm hangs behind the jacket
+    ctx.strokeStyle = '#2a4aa0'; ctx.lineWidth = 3.4; ctx.beginPath(); seg([[-2, -36], [-4, -29], [-3.5, -24]]); ctx.stroke();
+    ctx.fillStyle = '#efc4a6'; dot(-3.5, -23, 1.4);
+    // blue puffer jacket, hip length
+    ctx.fillStyle = '#3563c9'; rr(-6.6, -40.5, 13.6, 20.5, 4); ctx.fill();
+    ctx.strokeStyle = '#26489c'; ctx.lineWidth = 0.9;
+    ctx.beginPath(); seg([[-6.2, -34.5], [6.6, -34.5]]); seg([[-6.2, -28.5], [6.6, -28.5]]); seg([[3.2, -39.5], [3.2, -21]]); ctx.stroke();
+    ctx.fillStyle = '#26489c'; rr(-6.6, -22.6, 13.6, 2.6, 1.2); ctx.fill();
+    ctx.fillStyle = '#4877dc'; rr(-3.4, -42, 8.6, 3.4, 1.6); ctx.fill();
     // near arm bent, cigarette at chin level
-    ctx.strokeStyle = '#a8784a'; ctx.lineWidth = 3.4; ctx.beginPath(); seg([[2.2, -37], [7, -29.5], [10.4, -36]]); ctx.stroke();
+    ctx.strokeStyle = '#3563c9'; ctx.lineWidth = 3.6; ctx.beginPath(); seg([[2.2, -37], [7, -29.5], [10.4, -36]]); ctx.stroke();
     ctx.fillStyle = '#efc4a6'; dot(10.8, -36.6, 1.5);
     ctx.strokeStyle = '#f4f1ea'; ctx.lineWidth = 1.1; ctx.beginPath(); seg([[11.4, -37.2], [14.2, -38.4]]); ctx.stroke();
     ctx.fillStyle = `rgba(255,${120 + Math.round(Math.sin(stateT * 7) * 40)},40,1)`; dot(14.6, -38.6, 0.9);
-    // head: dark hair in a bun, red lips
+    // head: dark hair down to the shoulders, red lips
     ctx.fillStyle = '#e9b99a'; ctx.fillRect(0.6, -43.5, 3, 3);
-    ctx.fillStyle = '#f2cdb2'; oval(3, -46, 4.4, 4.9);
-    ctx.fillStyle = '#c4372f'; oval(6.6, -43.6, 1.1, 0.7);
-    ctx.fillStyle = '#231a17'; dot(5.4, -47, 0.75);
-    ctx.strokeStyle = '#231a17'; ctx.lineWidth = 0.7; ctx.beginPath(); seg([[4.6, -48.3], [6.6, -48.6]]); ctx.stroke();
     ctx.fillStyle = '#2a1d1a';
-    ctx.beginPath(); ctx.moveTo(6.8, -49.2); ctx.quadraticCurveTo(3, -53, -1.6, -49.4); ctx.quadraticCurveTo(-2.6, -45, -1.2, -41.6);
-    ctx.quadraticCurveTo(0.8, -44, 1.6, -47.6); ctx.quadraticCurveTo(4.4, -48.6, 6.8, -49.2); ctx.fill();
-    dot(-2.4, -51.4, 2.6);
+    ctx.beginPath(); ctx.moveTo(-2.6, -49); ctx.quadraticCurveTo(-4, -42, -3, -38.4); ctx.lineTo(1.8, -39.4); ctx.quadraticCurveTo(0.6, -44, 2, -48.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#f2cdb2'; oval(3.2, -45.6, 4.3, 4.8);
+    ctx.fillStyle = '#2a1d1a'; oval(0.4, -45, 1.8, 3.6, 0.2);
+    ctx.fillStyle = '#c4372f'; oval(6.7, -43.2, 1.1, 0.7);
+    ctx.fillStyle = '#231a17'; dot(5.6, -46.2, 0.75);
+    // black beanie with a ribbed cuff
+    ctx.fillStyle = '#16161a';
+    ctx.beginPath(); ctx.moveTo(-3.4, -48.4); ctx.quadraticCurveTo(-3, -56, 3.2, -55.8); ctx.quadraticCurveTo(8.8, -55.4, 8.4, -48.4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#25252b'; rr(-3.8, -50.4, 12.6, 3.2, 1.2); ctx.fill();
+    ctx.strokeStyle = '#3b3b44'; ctx.lineWidth = 0.6;
+    ctx.beginPath(); for (let k = -2.2; k < 8.4; k += 1.7) seg([[k, -50], [k, -47.6]]); ctx.stroke();
     ctx.restore();
     for (const s of smoke) { ctx.fillStyle = `rgba(200,200,208,${s.a})`; dot(s.x, s.y, s.r); }
   }
@@ -1086,8 +1102,13 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
     ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
     if (state === 'crash' && stateT < 0.3) ctx.translate(rnd(-2.5, 2.5), rnd(-2.5, 2.5));
     drawGround();
-    for (const ln of lanes) for (const t of ln.trucks) drawGazel(t, ln);
-    drawLady();
+    let ladyDone = false;
+    for (const ln of lanes) {
+      // she is drawn behind the lane she waits at, so a passing GAZelle drives in front of her
+      if (!ladyDone && lady.g - 12 < ln.row * R + R - 9) { drawLady(); ladyDone = true; }
+      for (const t of ln.trucks) drawGazel(t, ln);
+    }
+    if (!ladyDone) drawLady();
     drawPlayer();
     drawFx();
   }
