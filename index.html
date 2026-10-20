@@ -25,7 +25,7 @@ img { max-width: 100%; }
 <title>Костик против Газелей</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Rubik:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Russo+One&family=Rubik:wght@400;500;700&display=swap">
 <style>
 /* Layout: one-screen arcade — HUD strip on top, road board in the middle, big thumb buttons below */
 :root {
@@ -42,6 +42,7 @@ img { max-width: 100%; }
   --scrim: rgba(22, 22, 28, 0.86);
   --font-display: 'Russo One', 'Arial Black', system-ui, sans-serif;
   --font-body: 'Rubik', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-pixel: 'Press Start 2P', ui-monospace, 'Courier New', monospace;
   color-scheme: dark;
 }
 html, body { height: 100%; }
@@ -138,6 +139,8 @@ canvas {
   border-radius: 16px;
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
+  max-height: 100%;
+  overflow-y: auto;
 }
 .card canvas.portrait {
   width: 104px;
@@ -209,6 +212,67 @@ kbd {
   color: var(--fg);
 }
 button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
+#over canvas.portrait { width: 64px; height: 64px; margin: -8px 0 -4px; }
+.ghost {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 18px;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.name-form { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.name-form label { font-size: 13px; color: var(--muted); }
+.name-row { display: flex; gap: 8px; }
+.name-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 2px solid var(--accent);
+  border-radius: 10px;
+  background: #0e0e12;
+  color: var(--fg);
+  font: 700 16px var(--font-body);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.name-row input:focus-visible { outline: 3px solid var(--signal); outline-offset: 1px; }
+.cta.small { margin-top: 0; padding: 9px 14px; font-size: 15px; box-shadow: 0 4px 0 var(--accent-deep); }
+/* old-style arcade high-score table */
+.lb {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 12px 12px 10px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: #0d0d11;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  line-height: 1.2;
+  text-transform: uppercase;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.lb li { display: flex; align-items: baseline; gap: 8px; }
+.lb .rk { color: var(--muted); }
+.lb .nm { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb .dots { flex: 1 1 auto; min-width: 8px; border-bottom: 2px dotted var(--line); }
+.lb li:first-child { color: var(--signal); }
+.lb li.me { color: var(--accent-hi); animation: blink 0.9s steps(2, jump-none) infinite; }
+.lb li.gap { justify-content: center; color: var(--muted); }
+@keyframes blink { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .lb li.me { animation: none; } }
+.lb-status { margin: 0; min-height: 1.2em; font-size: 12.5px; color: var(--muted); }
 @media (pointer: fine) {
   .move { height: 52px; font-size: 20px; }
 }
@@ -249,6 +313,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
         <h2>Переведи Костика через дорогу</h2>
         <p>Костик едет на фиолетовом велике по зебре. Газели не тормозят, так что жди, пока откроется окно. За ним ходит тётя в длинном пальто с сигаретой, её Газели почему-то не сбивают.</p>
         <button class="cta" id="startBtn" type="button">Поехали</button>
+        <button class="ghost" id="lbBtn" type="button">Таблица рекордов</button>
         <p class="small">Телефон: тап по дороге или кнопка ▲.<br>Компьютер: стрелка ↑ или пробел.</p>
       </div>
     </div>
@@ -259,7 +324,26 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
         <p class="eyebrow">Бип-бип!</p>
         <h2>Газели победили</h2>
         <p id="overText">Переходов: 0</p>
+        <form class="name-form" id="nameForm" hidden>
+          <label for="nameInput">Впиши имя в таблицу рекордов</label>
+          <div class="name-row">
+            <input id="nameInput" name="name" maxlength="12" autocomplete="nickname" autocapitalize="characters" spellcheck="false" enterkeyhint="done" placeholder="Имя">
+            <button class="cta small" id="nameBtn" type="submit">Записать</button>
+          </div>
+        </form>
+        <ol class="lb" id="lbOver" aria-label="Таблица рекордов"></ol>
+        <p class="lb-status" id="lbOverStatus" role="status"></p>
         <button class="cta" id="againBtn" type="button">Ещё раз</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="lb" hidden>
+      <div class="card">
+        <p class="eyebrow">Переходы за одну игру</p>
+        <h2>Рекорды</h2>
+        <ol class="lb" id="lbList" aria-label="Таблица рекордов"></ol>
+        <p class="lb-status" id="lbStatus" role="status"></p>
+        <button class="cta" id="lbClose" type="button">Назад</button>
       </div>
     </div>
   </div>
@@ -397,6 +481,13 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
     setState('over');
     $('overText').textContent = `Переходов: ${score}. Рекорд: ${best}.`;
     $('over').hidden = false;
+    $('nameForm').hidden = score < 1;
+    $('nameBtn').disabled = false;
+    if (score >= 1) {
+      $('nameInput').value = loadName();
+      if (window.matchMedia && matchMedia('(pointer: fine)').matches) $('nameInput').focus({ preventScroll: true });
+    }
+    lbShow($('lbOver'), $('lbOverStatus'));
     sfx.over();
   }
   function start() {
@@ -1054,9 +1145,82 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
     over() { [392, 330, 262].forEach((f, i) => tone(f, 0.22, 'triangle', 0.07, 0.5 + i * 0.18)); },
   };
 
+  // ---- leaderboard: one shared list in a free no-signup text store, players type just a name ----
+  const LB_URL = 'https://textdb.online/', LB_KEY = 'kostik-gazel-hiscores-djblfikx5g8n';
+  const LB_FIXED = [['Ivan', 69, 0]];
+  const cleanName = v => String(v || '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 12);
+  function lbTop(rows) {
+    const ok = rows.filter(r => Array.isArray(r) && cleanName(r[0]) && Number.isInteger(r[1]) && r[1] >= 0 && r[1] < 1000)
+      .map(r => [cleanName(r[0]), r[1], Number(r[2]) || 0]);
+    for (const f of LB_FIXED) if (!ok.some(r => r[0] === f[0] && r[1] === f[1])) ok.push(f);
+    return ok.sort((a, b) => b[1] - a[1] || a[2] - b[2]).slice(0, 50);
+  }
+  async function lbLoad() {
+    const r = await fetch(LB_URL + LB_KEY + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error('load ' + r.status);
+    const text = await r.text();
+    let rows = [];
+    try { const d = JSON.parse(text); if (Array.isArray(d.s)) rows = d.s; } catch (e) {}
+    return lbTop(rows);
+  }
+  async function lbSave(rows) {
+    const r = await fetch(LB_URL + 'update', { method: 'POST', body: new URLSearchParams({ key: LB_KEY, value: JSON.stringify({ v: 1, s: rows }) }) });
+    const d = await r.json();
+    if (!r.ok || d.status !== 1) throw new Error('save');
+  }
+  // read, add, write, read back; retry if someone else saved at the same moment
+  async function lbSubmit(name, sc) {
+    const mine = [name, sc, Date.now()];
+    const same = r => r[0] === mine[0] && r[1] === mine[1] && r[2] === mine[2];
+    for (let i = 0; i < 3; i++) {
+      const rows = lbTop([...(await lbLoad()), mine]);
+      if (!rows.some(same)) return { rows, mine };
+      await lbSave(rows);
+      const back = await lbLoad();
+      if (back.some(same)) return { rows: back, mine };
+    }
+    throw new Error('busy');
+  }
+  function lbRender(ol, rows, mine) {
+    const same = r => mine && r[0] === mine[0] && r[1] === mine[1] && r[2] === mine[2];
+    const row = (rank, r, cls) => {
+      const li = document.createElement('li');
+      if (cls) li.className = cls;
+      for (const [c, t] of [['rk', rank], ['nm', r[0]], ['dots', ''], ['sc', String(r[1])]]) {
+        const sp = document.createElement('span'); sp.className = c; sp.textContent = t; li.append(sp);
+      }
+      ol.append(li);
+    };
+    ol.textContent = '';
+    rows.slice(0, 10).forEach((r, i) => row(String(i + 1).padStart(2, '0'), r, same(r) ? 'me' : ''));
+    const at = mine ? rows.findIndex(same) : -1;
+    if (mine && (at < 0 || at >= 10)) {
+      const li = document.createElement('li'); li.className = 'gap'; li.textContent = '· · ·'; ol.append(li);
+      row(at < 0 ? '--' : String(at + 1), mine, 'me');
+    }
+  }
+  let lbReq = 0;
+  async function lbShow(ol, status, mine) {
+    const req = ++lbReq;
+    status.textContent = 'Загружаю рекорды…';
+    if (!ol.childElementCount) lbRender(ol, lbTop([]), null);
+    try {
+      const rows = await lbLoad();
+      if (req !== lbReq) return;
+      lbRender(ol, rows, mine);
+      status.textContent = '';
+    } catch (e) {
+      if (req === lbReq) status.textContent = 'Рекорды не загрузились. Проверь интернет.';
+    }
+  }
+  function loadName() { try { return localStorage.getItem('kostik-name') || ''; } catch (e) { return ''; } }
+  function saveName(n) { try { localStorage.setItem('kostik-name', n); } catch (e) {} }
+
   // ---- input ----
   window.addEventListener('keydown', e => {
     const k = e.key;
+    if (e.target.tagName === 'INPUT') return;
+    if (!$('lb').hidden) { if (k === 'Escape') $('lb').hidden = true; return; }
     if (state === 'menu' || state === 'over') {
       if ((k === 'Enter' || k === ' ') && e.target.tagName !== 'BUTTON') { e.preventDefault(); start(); }
       return;
@@ -1074,6 +1238,26 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
   bindMove($('backBtn'), 1);
   $('startBtn').addEventListener('click', start);
   $('againBtn').addEventListener('click', start);
+  $('lbBtn').addEventListener('click', () => { $('lb').hidden = false; lbShow($('lbList'), $('lbStatus')); });
+  $('lbClose').addEventListener('click', () => { $('lb').hidden = true; });
+  $('nameForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const name = cleanName($('nameInput').value), sc = score, status = $('lbOverStatus');
+    if (!name) { status.textContent = 'Впиши имя, чтобы попасть в таблицу.'; return; }
+    $('nameBtn').disabled = true;
+    status.textContent = 'Записываю…';
+    lbReq++;
+    try {
+      const { rows, mine } = await lbSubmit(name, sc);
+      saveName(name);
+      $('nameForm').hidden = true;
+      lbRender($('lbOver'), rows, mine);
+      status.textContent = 'Записано!';
+    } catch (err) {
+      $('nameBtn').disabled = false;
+      status.textContent = 'Не получилось записать. Попробуй ещё раз.';
+    }
+  });
   $('sound').addEventListener('click', () => {
     soundOn = !soundOn;
     $('sound').setAttribute('aria-pressed', String(soundOn));
