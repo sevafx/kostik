@@ -242,7 +242,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
   user-select: text;
 }
 .name-row input:focus-visible { outline: 3px solid var(--signal); outline-offset: 1px; }
-.cta.small { margin-top: 0; padding: 9px 14px; font-size: 15px; box-shadow: 0 4px 0 var(--accent-deep); }
+.cta.compact { margin-top: 0; padding: 9px 14px; font-size: 15px; box-shadow: 0 4px 0 var(--accent-deep); }
 /* old-style arcade high-score table */
 .lb {
   box-sizing: border-box;
@@ -328,7 +328,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
           <label for="nameInput">Впиши имя в таблицу рекордов</label>
           <div class="name-row">
             <input id="nameInput" name="name" maxlength="12" autocomplete="nickname" autocapitalize="characters" spellcheck="false" enterkeyhint="done" placeholder="Имя">
-            <button class="cta small" id="nameBtn" type="submit">Записать</button>
+            <button class="cta compact" id="nameBtn" type="submit">Записать</button>
           </div>
         </form>
         <ol class="lb" id="lbOver" aria-label="Таблица рекордов"></ol>
