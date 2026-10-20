@@ -213,6 +213,7 @@ kbd {
 }
 button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
 #over canvas.portrait { width: 64px; height: 64px; margin: -8px 0 -4px; }
+@media (max-height: 820px) { #over canvas.portrait { display: none; } }
 .ghost {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -252,7 +253,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
   background: #0d0d11;
   border: 2px solid var(--line);
   border-radius: 6px;
@@ -269,7 +270,6 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
 .lb .dots { flex: 1 1 auto; min-width: 8px; border-bottom: 2px dotted var(--line); }
 .lb li:first-child { color: var(--signal); }
 .lb li.me { color: var(--accent-hi); animation: blink 0.9s steps(2, jump-none) infinite; }
-.lb li.gap { justify-content: center; color: var(--muted); }
 @keyframes blink { 50% { opacity: 0.3; } }
 @media (prefers-reduced-motion: reduce) { .lb li.me { animation: none; } }
 .lb-status { margin: 0; min-height: 1.2em; font-size: 12.5px; color: var(--muted); }
@@ -1208,12 +1208,10 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
       ol.append(li);
     };
     ol.textContent = '';
-    rows.slice(0, 10).forEach((r, i) => row(String(i + 1).padStart(2, '0'), r, same(r) ? 'me' : ''));
-    const at = mine ? rows.findIndex(same) : -1;
-    if (mine && (at < 0 || at >= 10)) {
-      const li = document.createElement('li'); li.className = 'gap'; li.textContent = '· · ·'; ol.append(li);
-      row(at < 0 ? '--' : String(at + 1), mine, 'me');
-    }
+    // six rows at most; a result below the top 6 takes the last row
+    const at = mine ? rows.findIndex(same) : -1, out = mine && (at < 0 || at >= 6);
+    rows.slice(0, out ? 5 : 6).forEach((r, i) => row(String(i + 1).padStart(2, '0'), r, same(r) ? 'me' : ''));
+    if (out) row(at < 0 ? '--' : String(at + 1).padStart(2, '0'), mine, 'me');
   }
   let lbReq = 0;
   async function lbShow(ol, status, mine) {
