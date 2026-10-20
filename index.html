@@ -282,6 +282,8 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
   const R = 64, ROWS = 8, H = R * ROWS; // row 0 = far sidewalk (goal), 1..6 = lanes, 7 = start sidewalk
   const ZW = 84; // zebra width
   const HOP = 0.14; // seconds per hop
+  const CRASH_T = 1.6, FLY_T = 0.38; // crash length, flight onto the truck
+  const calm = !!window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W = 400, scale = 1, dpr = 1;
   const cx = () => W / 2;
 
@@ -369,7 +371,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
     for (const t of ln.trucks) {
       if (bx + 14 > t.x + 4 && bx - 14 < t.x + t.len - 3) {
         lives--;
-        crash = { y, dir: ln.dir };
+        crash = { y, dir: ln.dir, t, ln, x0: bx };
         setState('crash');
         sfx.honk();
         hud();
@@ -420,7 +422,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
         }
       }
       checkHit();
-    } else if (state === 'crash' && stateT > 1.2) {
+    } else if (state === 'crash' && stateT > CRASH_T) {
       if (lives <= 0) gameOver(); else { resetPlayer(); setState('play'); }
     } else if (state === 'win' && stateT > 1.0) {
       resetPlayer(); setState('play');
@@ -589,7 +591,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
 
   function seg(pts) { ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); }
 
-  function drawBike(x, g, ang, rot) {
+  function drawBike(x, g, ang, rot, rider = true) {
     ctx.save();
     ctx.translate(x, g);
     if (!rot) { ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(0, 1, 26, 3.5, 0, 0, Math.PI * 2); ctx.fill(); }
@@ -613,7 +615,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
       ctx.moveTo(h[0] - dx, h[1] - dy); ctx.lineTo(h[0] + dx, h[1] + dy);
     }
     ctx.stroke();
-    leg(pedal(ang + Math.PI), '#1f1c29', '#bfc0c8');
+    if (rider) leg(pedal(ang + Math.PI), '#1f1c29', '#bfc0c8');
     // purple frame
     ctx.strokeStyle = '#8f3dff'; ctx.lineWidth = 3.4;
     ctx.beginPath();
@@ -621,6 +623,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
     ctx.stroke();
     ctx.strokeStyle = '#15141a'; ctx.lineWidth = 2.4;
     ctx.beginPath(); seg([ht, [8, -30], [13, -30]]); seg([[-10, -26], [-2, -26]]); ctx.stroke();
+    if (!rider) { ctx.restore(); return; }
     leg(pedal(ang), '#34304a', '#f4f4f6');
     // rider: oversized black tee with a white/lime print and a badge on a lanyard
     ctx.save(); ctx.translate(-2, -32.5); ctx.rotate(0.6);
@@ -790,13 +793,102 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
     const x = cx();
     if (state === 'crash') {
       const k = Math.min(1, stateT * 5);
-      drawBike(x, crash.y + 22, player.wheel, -crash.dir * 1.3 * k);
-      if (Math.floor(stateT * 6) % 2 === 0 || stateT > 0.6) bubble(x, crash.y - 34, 'БИП-БИП!');
+      drawBike(x, crash.y + 22, player.wheel, -crash.dir * 1.3 * k, false);
+      drawCrash();
       return;
     }
     const y = playerY();
     const hop = player.t < 1 ? Math.sin(Math.PI * player.t) * 6 : 0;
     drawBike(x, y + 22 - hop, player.wheel, 0);
+  }
+
+  // Kostik flies off the bike and lands upside-down on the GAZelle that hit him
+  function drawCrash() {
+    const { t, ln, dir, x0 } = crash;
+    const L = t.len, gy = ln.row * R + R - 9;
+    const lx = Math.max(42, Math.min(W - 42, Math.max(t.x + 14, Math.min(t.x + L - 14, x0))));
+    const inCab = dir === 1 ? lx > t.x + L - 36 : lx < t.x + 36;
+    const ly = gy - (inCab ? 43 : 50);
+    const p = Math.min(1, stateT / FLY_T), e = easeOut(p);
+    const px = x0 + (lx - x0) * e;
+    const py = crash.y + (ly - crash.y) * p - Math.sin(Math.PI * p) * 34;
+    const since = stateT - FLY_T, landed = since > 0;
+    if (landed && since < 0.35) {
+      ctx.fillStyle = `rgba(240,236,228,${0.75 * (1 - since / 0.35)})`;
+      for (const s of [-1, 1]) dot(lx + s * (9 + since * 46), ly - 2 - since * 12, 2.5 + since * 9);
+    }
+    const squash = landed && since < 0.14 ? 1 - Math.sin(since / 0.14 * Math.PI) * 0.2 : 1;
+    const wig = landed && !calm ? Math.sin(since * 22) * 0.2 * Math.max(0.35, 1 - since) : 0;
+    drawKostikPose(px, py, (1 - e) * dir * 3, dir, squash, wig);
+    if (landed) {
+      ctx.fillStyle = '#f2c230';
+      for (let i = 0; i < 3; i++) {
+        const a = (calm ? 0 : stateT * 5) + i * Math.PI * 2 / 3;
+        star(lx - dir * 7 + Math.cos(a) * 13, ly - 8 + Math.sin(a) * 5, 3);
+      }
+    }
+    if (Math.floor(stateT * 6) % 2 === 0 || stateT > 0.6) bubble(lx, ly - 82 >= 16 ? ly - 82 : gy + 26, 'БИП-БИП!');
+  }
+
+  function star(x, y, r) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, d = i % 2 ? r * 0.45 : r; ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d); }
+    ctx.fill();
+  }
+
+  // the meme pose: head and shoulders on the roof, one leg straight up, the other out sideways
+  function drawKostikPose(x, y, rot, face, squash, wig) {
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(rot); ctx.scale(face * 1.15, squash * 1.15);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    const limb = (pts, w, col) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); seg(pts); ctx.stroke(); };
+    const sh = [1, -9], hip = [9, -21];
+    // far arm flailing
+    limb([sh, [-7, -17]], 4, '#16161b');
+    limb([[-7, -17], [-13, -21], [-17, -16]], 2.4, '#f1c7a5');
+    ctx.fillStyle = '#f1c7a5'; dot(-17.3, -15.6, 1.6);
+    // raised leg with a twitch, then the leg flung out sideways
+    ctx.save(); ctx.translate(hip[0], hip[1]); ctx.rotate(wig);
+    limb([[0, 0], [1, -12], [0, -24]], 4.2, '#2b2838');
+    ctx.fillStyle = '#f4f4f6'; oval(2.2, -26, 4, 2.3, -0.15);
+    ctx.fillStyle = '#bfc0c8'; oval(2.2, -24.6, 3.6, 0.8, -0.15);
+    ctx.restore();
+    limb([hip, [19, -25], [30, -23]], 4.2, '#34304a');
+    ctx.fillStyle = '#f4f4f6'; oval(32.6, -23.4, 2.3, 4, 0.2);
+    ctx.fillStyle = '#bfc0c8'; oval(33.9, -23.2, 0.8, 3.6, 0.2);
+    // torso: oversized black tee with the white/lime print
+    ctx.save(); ctx.translate((sh[0] + hip[0]) / 2, (sh[1] + hip[1]) / 2); ctx.rotate(Math.atan2(hip[1] - sh[1], hip[0] - sh[0]));
+    ctx.fillStyle = '#16161b'; rr(-10, -6.5, 20, 13, 4); ctx.fill();
+    for (const [yy, c, bars] of [[-3.8, '#f4f4f0', [[-6, 3], [-1.6, 2], [1.6, 4]]], [-1, '#c8e43c', [[-6.4, 4.4], [-0.6, 5.4]]], [1.8, '#f4f4f0', [[-5.4, 2], [-2, 3.6], [3, 3]]]]) {
+      ctx.fillStyle = c; for (const [bx, bw] of bars) ctx.fillRect(bx, yy, bw, 2);
+    }
+    ctx.fillStyle = '#f2c230'; rr(-2.4, 3.2, 3.6, 4.4, 0.7); ctx.fill();
+    ctx.restore();
+    // near arm hanging down onto the roof
+    limb([sh, [7, -6]], 4, '#16161b');
+    limb([[7, -6], [12, -3], [16, -1]], 2.4, '#f1c7a5');
+    ctx.fillStyle = '#f1c7a5'; dot(16.4, -1, 1.6);
+    // upside-down head: hair spills onto the roof, glasses knocked askew
+    const hx = -6, hy = -7.5;
+    ctx.fillStyle = '#4b2c1a'; oval(hx, hy + 3.4, 9.2, 5);
+    ctx.fillStyle = '#f3cdb0'; oval(hx, hy - 0.8, 7.2, 6.6);
+    ctx.fillStyle = '#6b4128';
+    ctx.beginPath();
+    ctx.moveTo(hx - 9.5, hy + 7.5); ctx.quadraticCurveTo(hx - 8.6, hy - 1, hx - 2, hy + 1.2);
+    ctx.quadraticCurveTo(hx, hy - 0.6, hx + 2, hy + 1.2); ctx.quadraticCurveTo(hx + 8.6, hy - 1, hx + 9.5, hy + 7.5);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#a7754a'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(hx - 7, hy + 6.5); ctx.quadraticCurveTo(hx - 6, hy + 1.5, hx - 2.5, hy + 2); ctx.moveTo(hx + 7, hy + 6.5); ctx.quadraticCurveTo(hx + 6, hy + 1.5, hx + 2.5, hy + 2); ctx.stroke();
+    ctx.fillStyle = '#231a17'; oval(hx, hy - 5.4, 1.5, 1.9);
+    ctx.save(); ctx.translate(hx, hy - 2.2); ctx.rotate(0.3);
+    ctx.strokeStyle = '#231a17'; ctx.lineWidth = 0.9; ctx.beginPath();
+    for (const ex of [-3.2, 3.2]) { seg([[ex - 1.1, -1.1], [ex + 1.1, 1.1]]); seg([[ex - 1.1, 1.1], [ex + 1.1, -1.1]]); }
+    ctx.stroke();
+    ctx.strokeStyle = '#444a55'; ctx.lineWidth = 0.7;
+    for (const ex of [-3.2, 3.2]) { rr(ex - 2.6, -2.1, 5.2, 4.2, 1.2); ctx.stroke(); }
+    ctx.beginPath(); seg([[-0.6, 0], [0.6, 0]]); seg([[-2.6, 2.3], [2.6, 2.3]]); ctx.stroke();
+    ctx.restore();
+    ctx.restore();
   }
 
   function bubble(x, y, text) {
