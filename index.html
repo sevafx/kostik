@@ -397,6 +397,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
   let score = 0, lives = 3, best = 0;
   let player = null, crash = null;
   let confetti = [];
+  let cheatT = 0;
   let smoke = [];
   const lady = { i: 6, to: -1, g: 7 * 64 + 54, phase: 0, puff: 0 };
   let soundOn = true;
@@ -477,22 +478,30 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
       c: pick(colors), s: rnd(3, 6), a: rnd(0, 6), va: rnd(-8, 8),
     }));
   }
+  // cheat: IDDQD typed as the name on the game-over card brings back all lives, the score stays
+  function revive() {
+    unlockAudio();
+    lives = 3; cheatT = 1.4;
+    resetPlayer(); setState('play');
+    $('over').hidden = true;
+    $('nameInput').value = ''; $('nameInput').blur();
+    sfx.win();
+    hud();
+  }
   function gameOver() {
     setState('over');
     $('overText').textContent = `Переходов: ${score}. Рекорд: ${best}.`;
     $('over').hidden = false;
-    $('nameForm').hidden = score < 1;
+    $('nameForm').hidden = false;
     $('nameBtn').disabled = false;
-    if (score >= 1) {
-      $('nameInput').value = loadName();
-      if (window.matchMedia && matchMedia('(pointer: fine)').matches) $('nameInput').focus({ preventScroll: true });
-    }
+    $('nameInput').value = loadName();
+    if (window.matchMedia && matchMedia('(pointer: fine)').matches) $('nameInput').focus({ preventScroll: true });
     lbShow($('lbOver'), $('lbOverStatus'));
     sfx.over();
   }
   function start() {
     unlockAudio();
-    score = 0; lives = 3; confetti = []; smoke = [];
+    score = 0; lives = 3; confetti = []; smoke = []; cheatT = 0;
     lady.i = 6; lady.to = -1; lady.g = LADY_STOPS[6];
     resetLanes(); resetPlayer();
     setState('play');
@@ -502,6 +511,7 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
 
   function update(dt) {
     stateT += dt;
+    if (cheatT > 0) cheatT -= dt;
     if (state !== 'crash') stepTraffic(dt);
     stepLady(dt);
     for (const p of confetti) { p.vy += 520 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.a += p.va * dt; }
@@ -1090,6 +1100,15 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
       ctx.fillStyle = '#ffffff'; ctx.fillText('Перешёл! +1', cx(), y);
       ctx.globalAlpha = 1;
     }
+    if (cheatT > 0) {
+      ctx.globalAlpha = Math.min(1, cheatT);
+      ctx.font = '400 32px "Russo One", "Arial Black", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const y = H / 2 - (1.4 - cheatT) * 24;
+      ctx.lineWidth = 6; ctx.strokeStyle = '#2a124f'; ctx.strokeText('IDDQD', cx(), y);
+      ctx.fillStyle = '#c8e43c'; ctx.fillText('IDDQD', cx(), y);
+      ctx.globalAlpha = 1;
+    }
   }
 
   function draw() {
@@ -1256,6 +1275,8 @@ button:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
   $('nameForm').addEventListener('submit', async e => {
     e.preventDefault();
     const name = cleanName($('nameInput').value), sc = score, status = $('lbOverStatus');
+    if (state === 'over' && ['iddqd', 'iidqd'].includes(name.toLowerCase())) { revive(); return; }
+    if (sc < 1) { status.textContent = 'В таблицу попадают от одного перехода.'; return; }
     if (!name) { status.textContent = 'Впиши имя, чтобы попасть в таблицу.'; return; }
     $('nameBtn').disabled = true;
     status.textContent = 'Записываю…';
